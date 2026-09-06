@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Face Behavior Trainer</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b0b10;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+#app {
+  width: 700px;
+  max-width: 100%;
+  margin: auto;
+}
+
+#tabs {
+  display: flex;
+  background: #15151d;
+  border-bottom: 1px solid #292934;
+}
+
+.tab {
+  flex: 1;
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  color: #888;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.tab.active {
+  color: white;
+  background: #242431;
+  box-shadow: inset 0 -3px #4d8dff;
+}
+
+#content {
+  padding: 15px;
+}
+
+#cameraPage {
+  width: 100%;
+}
+
+#canvasContainer {
+  width: 640px;
+  max-width: 100%;
+  margin: auto;
+}
+
+canvas {
+  display: block;
+  width: 640px !important;
+  height: 480px !important;
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+.panel {
+  background: #15151d;
+  border: 1px solid #292934;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 15px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+button {
+  background: #22222c;
+  color: white;
+  border: 1px solid #3a3a48;
+  border-radius: 8px;
+  padding: 10px 13px;
+  margin: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover {
+  background: #30303c;
+}
+
+button.selected {
+  background: #1769ff;
+  border-color: #5b9aff;
+}
+
+button.correct {
+  background: #159447;
+  border-color: #39d879;
+}
+
+button.danger {
+  background: #a71919;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.correctButtons {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.sample-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.sample {
+  background: #20202a;
+  padding: 14px 5px;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.sample-number {
+  font-size: 24px;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.stat {
+  background: #20202a;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.stat-label {
+  color: #999;
+  font-size: 13px;
+}
+
+.stat-value {
+  font-size: 27px;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.hint {
+  color: #999;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#status {
+  text-align: center;
+  color: #69ff91;
+  min-height: 22px;
+  margin: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+<div id="tabs">
+<button class="tab active" id="cameraTab">CAMERA</button>
+<button class="tab" id="trainingTab">TRAINING</button>
+<button class="tab" id="statsTab">STATS</button>
+</div>
+
+<div id="content">
+
+<div id="cameraPage">
+
+<div id="canvasContainer"></div>
+
+<div class="panel">
+<div class="title">Correct the Guess</div>
+
+<div id="cameraGuess">
+Current guess: Waiting
+</div>
+
+<div class="correctButtons">
+<button id="correctClosed">CLOSED</button>
+<button id="correctTalking">TALKING</button>
+<button id="correctYawning">YAWNING</button>
+<button id="correctOpen">MOUTH OPEN</button>
+<button id="correctOther">OTHER</button>
+</div>
+
+<p class="hint">
+If the guess is wrong, click the correct behavior.
+The current facial sequence will be added to your training data.
+</p>
+</div>
+
+</div>
+
+<div id="trainingPage" style="display:none">
+
+<div class="panel">
+<div class="title">Training</div>
+
+<button id="trainBtn" disabled>TRAIN MODEL</button>
+<button id="saveModelBtn" disabled>SAVE MODEL</button>
+<button id="loadModelBtn">LOAD MODEL</button>
+
+<p class="hint">
+Collect examples from the Camera tab, correct the guesses,
+then train the model here.
+</p>
+</div>
+
+<div class="panel">
+<div class="title">Training Samples</div>
+
+<div class="sample-grid">
+
+<div class="sample">
+CLOSED
+<div class="sample-number" id="closedCount">0</div>
+</div>
+
+<div class="sample">
+TALKING
+<div class="sample-number" id="talkingCount">0</div>
+</div>
+
+<div class="sample">
+YAWNING
+<div class="sample-number" id="yawnCount">0</div>
+</div>
+
+<div class="sample">
+MOUTH OPEN
+<div class="sample-number" id="openCount">0</div>
+</div>
+
+<div class="sample">
+OTHER
+<div class="sample-number" id="otherCount">0</div>
+</div>
+
+</div>
+</div>
+
+<div class="panel">
+<div class="title">Sample Data</div>
+
+<button id="saveSamplesBtn">
+SAVE SAMPLES
+</button>
+
+<button id="loadSamplesBtn">
+LOAD SAMPLES
+</button>
+
+<button id="clearSamplesBtn" class="danger">
+CLEAR SAMPLES
+</button>
+</div>
+
+</div>
+
+<div id="statsPage" style="display:none">
+
+<div class="panel">
+
+<div class="title">Current State</div>
+
+<div class="stat-grid">
+
+<div class="stat">
+<div class="stat-label">CURRENT</div>
+<div class="stat-value" id="currentState">Waiting</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">CONFIDENCE</div>
+<div class="stat-value" id="confidence">0%</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">CLOSED</div>
+<div class="stat-value" id="closedStats">0</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">TALKING</div>
+<div class="stat-value" id="talkingStats">0</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">YAWNING</div>
+<div class="stat-value" id="yawnStats">0</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">MOUTH OPEN</div>
+<div class="stat-value" id="openStats">0</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">OTHER</div>
+<div class="stat-value" id="otherStats">0</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">MODEL</div>
+<div class="stat-value" id="modelStatus">Experimental</div>
+</div>
+
+</div>
+</div>
+
+<div class="panel">
+
+<div class="title">Time Detected</div>
+
+<div class="stat-grid">
+
+<div class="stat">
+<div class="stat-label">CLOSED</div>
+<div class="stat-value" id="closedTime">0.0s</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">TALKING</div>
+<div class="stat-value" id="talkingTime">0.0s</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">YAWNING</div>
+<div class="stat-value" id="yawnTime">0.0s</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">MOUTH OPEN</div>
+<div class="stat-value" id="openTime">0.0s</div>
+</div>
+
+<div class="stat">
+<div class="stat-label">OTHER</div>
+<div class="stat-value" id="otherTime">0.0s</div>
+</div>
+
+</div>
+</div>
+
+<div class="panel">
+
+<div class="title">Session</div>
+
+<div class="stat">
+<div class="stat-label">SESSION TIME</div>
+<div class="stat-value" id="sessionTime">0:00</div>
+</div>
+
+<br>
+
+<button id="resetStatsBtn" class="danger">
+RESET STATS
+</button>
+
+</div>
+
+</div>
+
+<div id="status">
+Starting...
+</div>
+
+</div>
+</div>
+
+<script src="sketch.js"></script>
+
+</body>
+</html>
