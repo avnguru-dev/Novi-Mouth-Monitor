@@ -95,7 +95,7 @@ function setup() {
 
 
       setStatus("FaceMesh ready.");
-    }
+    
   );
     let workerCode = `
     let timer = null;
