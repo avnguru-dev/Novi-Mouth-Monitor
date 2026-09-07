@@ -74,37 +74,49 @@ function setup() {
     }
   );
 
-  let workerCode = 
-    let timer = null;
-    self.onmessage = function(e) {
-      if (e.data === 'start') {
-        if (!timer) {
-          timer = setInterval(function() {
-            self.postMessage('trigger');
-          }, 100);
-        }
-      } else if (e.data === 'stop') {
-        clearInterval(timer);
-        timer = null;
+let workerCode = `
+  let timer = null;
+
+  self.onmessage = function(e) {
+    if (e.data === 'start') {
+      if (!timer) {
+        timer = setInterval(function() {
+          self.postMessage('trigger');
+        }, 100);
       }
-      let blob = new Blob([workerCode], { type: "application/javascript" });
-  let backgroundWorker = new Worker(URL.createObjectURL(blob));
-  backgroundWorker.onmessage = function(e) {
-    if (e.data === 'trigger' && prediction === "MOUTH OPEN") {
-      if (!mouthOpenTrackerTime) {
-        mouthOpenTrackerTime = Date.now();
-      } else if (Date.now() - mouthOpenTrackerTime > ALERT_TIMEOUT_DURATION) {
-        if (Notification.permission === "granted") {
-          new Notification("Posture Alert!", {
-            body: "Your mouth has been open for too long.",
-            requireInteraction: false
-          });
-        }
-        mouthOpenTrackerTime = null;
-      }
+    } else if (e.data === 'stop') {
+      clearInterval(timer);
+      timer = null;
     }
   };
-}
+`;
+
+let blob = new Blob([workerCode], {
+  type: "application/javascript"
+});
+
+let backgroundWorker = new Worker(
+  URL.createObjectURL(blob)
+);
+
+backgroundWorker.onmessage = function(e) {
+  if (e.data === 'trigger' && prediction === "MOUTH OPEN") {
+    if (!mouthOpenTrackerTime) {
+      mouthOpenTrackerTime = Date.now();
+    } else if (
+      Date.now() - mouthOpenTrackerTime > ALERT_TIMEOUT_DURATION
+    ) {
+      if (Notification.permission === "granted") {
+        new Notification("Posture Alert!", {
+          body: "Your mouth has been open for too long.",
+          requireInteraction: false
+        });
+      }
+
+      mouthOpenTrackerTime = null;
+    }
+  }
+};
 
 function draw() {
   background(10);
