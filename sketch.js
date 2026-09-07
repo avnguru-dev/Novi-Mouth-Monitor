@@ -56,7 +56,6 @@ function setup() {
 
   sessionStartTime = millis();
   setStatus("Loading FaceMesh...");
-
   faceMesh = ml5.faceMesh(
     {
       maxFaces: 1,
@@ -74,9 +73,8 @@ function setup() {
       setStatus("FaceMesh ready.");
     }
   );
-}
 
-    let workerCode = `
+  let workerCode = `
     let timer = null;
     self.onmessage = function(e) {
       if (e.data === 'start') {
@@ -92,7 +90,7 @@ function setup() {
     };
   `;
   let blob = new Blob([workerCode], { type: "application/javascript" });
-  backgroundWorker = new Worker(URL.createObjectURL(blob));
+  let backgroundWorker = new Worker(URL.createObjectURL(blob));
   backgroundWorker.onmessage = function(e) {
     if (e.data === 'trigger' && prediction === "MOUTH OPEN") {
       if (!mouthOpenTrackerTime) {
@@ -112,6 +110,7 @@ function setup() {
 
 function draw() {
   background(10);
+
 
   if (activePage === "camera") {
     drawCamera();
