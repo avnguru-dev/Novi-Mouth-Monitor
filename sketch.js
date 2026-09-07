@@ -58,6 +58,7 @@ if ("serviceWorker" in navigator) {
 }
 
 
+
 function setup() {
   let canvas = createCanvas(640, 480);
   canvas.parent("canvasContainer");
@@ -167,7 +168,7 @@ lastDrawTime = now;
 
       if (prediction === "MOUTH OPEN") {
 
-  if (!mouthOpenTrackerTime) {
+  if (mouthOpenTrackerTime === null) {
     mouthOpenTrackerTime = Date.now();
   }
 
@@ -176,21 +177,7 @@ lastDrawTime = now;
     ALERT_TIMEOUT_DURATION
   ) {
 
-    if (
-      notificationServiceWorker &&
-      Notification.permission === "granted"
-    ) {
-
-      notificationServiceWorker.showNotification(
-        "Posture Alert!",
-        {
-          body: "Your mouth has been open for too long.",
-          requireInteraction: false,
-          tag: "mouth-open-alert"
-        }
-      );
-
-    }
+    sendMouthOpenNotification();
 
     mouthOpenTrackerTime = null;
   }
@@ -204,6 +191,7 @@ lastDrawTime = now;
 
 
 
+
   if (activePage === "camera") {
     drawFacePoints(faces[0]);
     drawCameraInfo();
@@ -211,6 +199,45 @@ lastDrawTime = now;
 
   updateCameraGuess();
   updateStatsDisplay();
+}
+
+async function sendMouthOpenNotification() {
+
+  if (!("Notification" in window)) {
+    console.log("Notifications are not supported.");
+    return;
+  }
+
+  if (Notification.permission !== "granted") {
+    console.log("Notification permission is not granted.");
+    return;
+  }
+
+  try {
+
+    const registration =
+      await navigator.serviceWorker.ready;
+
+    await registration.showNotification(
+      "Posture Alert!",
+      {
+        body: "Your mouth has been open for too long.",
+        icon: "icon.png",
+        tag: "mouth-open-alert",
+        requireInteraction: false
+      }
+    );
+
+    console.log("Mouth-open notification sent.");
+
+  } catch (error) {
+
+    console.error(
+      "Could not show notification:",
+      error
+    );
+
+  }
 }
 
 
