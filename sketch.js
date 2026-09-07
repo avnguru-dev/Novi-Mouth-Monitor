@@ -177,21 +177,18 @@ lastDrawTime = now;
   ) {
 
     if (
-  notificationServiceWorker &&
-  Notification.permission === "granted"
-) {
+      notificationServiceWorker &&
+      Notification.permission === "granted"
+    ) {
 
-  notificationServiceWorker.showNotification(
-    "Posture Alert!",
-    {
-      body: "Your mouth has been open for too long.",
-      requireInteraction: false,
-      tag: "mouth-open-alert"
-    }
-  );
-
-}
-
+      notificationServiceWorker.showNotification(
+        "Posture Alert!",
+        {
+          body: "Your mouth has been open for too long.",
+          requireInteraction: false,
+          tag: "mouth-open-alert"
+        }
+      );
 
     }
 
