@@ -176,12 +176,22 @@ function draw() {
     ruleBasedGuess(frame);
   }
 
-    if (prediction === "MOUTH OPEN") {
-    backgroundWorker.postMessage('start');
+      if (prediction === "MOUTH OPEN") {
+    if (!mouthOpenTrackerTime) {
+      mouthOpenTrackerTime = Date.now();
+    } else if (Date.now() - mouthOpenTrackerTime > ALERT_TIMEOUT_DURATION) {
+      if (Notification.permission === "granted") {
+        new Notification("Posture Alert!", {
+          body: "Your mouth has been open for too long.",
+          requireInteraction: false
+        });
+      }
+      mouthOpenTrackerTime = null;
+    }
   } else {
-    backgroundWorker.postMessage('stop');
     mouthOpenTrackerTime = null;
   }
+
 
 
   if (activePage === "camera") {
@@ -195,28 +205,25 @@ function draw() {
 
 
 function drawCamera() {
-  if (
-    !video ||
-    video.elt.readyState < 2
-  ) {
+  if (!video || video.elt.readyState < 2) {
     return;
   }
-
   push();
-
   translate(width, 0);
   scale(-1, 1);
-
-  image(
-    video,
-    0,
-    0,
-    width,
-    height
-  );
-
+  image(video, 0, 0, width, height);
   pop();
+  
+  canvas.elt.onclick = function() {
+    if (video.elt.requestPictureInPicture) {
+      video.elt.removeAttribute('hidden');
+      video.elt.style.width = '1px';
+      video.elt.style.height = '1px';
+      video.elt.requestPictureInPicture();
+    }
+  };
 }
+
 
 function getFeatureFrame(face) {
   if (
