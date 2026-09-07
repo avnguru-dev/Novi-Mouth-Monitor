@@ -1,5 +1,3 @@
-let backgroundWorker = null;
-
 let video;
 let faceMesh;
 let faces = [];
@@ -24,7 +22,6 @@ const featureCount = 10;
 const recordInterval = 60;
 
 let samples = [];
-
 let featureHistory = [];
 
 let prediction = "WAITING";
@@ -33,13 +30,11 @@ let predictionConfidence = 0;
 let currentState = -1;
 let stateStartTime = 0;
 
-let stateCounts = [0, 0, 0, 0, 0];
-let stateTimes = [0, 0, 0, 0, 0];
+let stateCounts =;
+let stateTimes =;
 
 let sessionStartTime = 0;
-
 let activePage = "camera";
-
 let statusDiv;
 
 function setup() {
@@ -58,10 +53,9 @@ function setup() {
   setupStats();
 
   sessionStartTime = millis();
-
   setStatus("Loading FaceMesh...");
 
-    faceMesh = ml5.faceMesh(
+  faceMesh = ml5.faceMesh(
     {
       maxFaces: 1,
       refineLandmarks: true,
@@ -69,15 +63,17 @@ function setup() {
     },
     function() {
       modelReady = true;
-
       faceMesh.detectStart(
         video,
         function(results) {
           faces = results;
         }
       );
-
       setStatus("FaceMesh ready.");
+    }
+  );
+}
+
       
       if (video.elt.requestPictureInPicture) {
         video.elt.removeAttribute('hidden');
