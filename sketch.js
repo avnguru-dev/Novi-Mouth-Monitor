@@ -1,10 +1,6 @@
 let video;
 let faceMesh;
 let faces = [];
-let lastDrawTime = 0;
-let drawGap = 0;
-let mouthOpenTrackerTime = null;
-const ALERT_TIMEOUT_DURATION = 3000;
 
 let modelReady = false;
 let classifier = null;
@@ -34,19 +30,24 @@ let stateStartTime = 0;
 let stateCounts = [0, 0, 0, 0, 0];
 let stateTimes = [0, 0, 0, 0, 0];
 
-
-
 let sessionStartTime = 0;
 let activePage = "camera";
 let statusDiv;
 
+// -------------------------
+// NOTIFICATIONS
+// -------------------------
+
 let notificationServiceWorker = null;
+
+const ALERT_TIMEOUT_DURATION = 3000;
+let mouthOpenTrackerTime = null;
+let notificationSent = false;
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js")
     .then(function(registration) {
       console.log("Service Worker registered.");
-
       notificationServiceWorker = registration;
     })
     .catch(function(error) {
@@ -58,8 +59,12 @@ if ("serviceWorker" in navigator) {
 }
 
 
+// -------------------------
+// SETUP
+// -------------------------
 
 function setup() {
+
   let canvas = createCanvas(640, 480);
   canvas.parent("canvasContainer");
 
@@ -75,7 +80,9 @@ function setup() {
   setupStats();
 
   sessionStartTime = millis();
+
   setStatus("Loading FaceMesh...");
+
   faceMesh = ml5.faceMesh(
     {
       maxFaces: 1,
@@ -83,35 +90,36 @@ function setup() {
       flipped: true
     },
     function() {
+
       modelReady = true;
+
       faceMesh.detectStart(
         video,
         function(results) {
           faces = results;
         }
       );
+
       setStatus("FaceMesh ready.");
     }
   );
-
 }
+
+
+// -------------------------
+// DRAW
+// -------------------------
+
 function draw() {
-  let now = Date.now();
-
-if (lastDrawTime !== 0) {
-  drawGap = now - lastDrawTime;
-}
-
-lastDrawTime = now;
 
   background(10);
-
 
   if (activePage === "camera") {
     drawCamera();
   }
 
   if (!modelReady) {
+
     if (activePage === "camera") {
       drawOverlay(
         "LOADING FACEMESH",
@@ -123,11 +131,17 @@ lastDrawTime = now;
     return;
   }
 
+
   if (faces.length === 0) {
+
     prediction = "NO FACE";
     predictionConfidence = 0;
 
     setCurrentState(-1);
+
+    // Reset mouth timer if face disappears
+    mouthOpenTrackerTime = null;
+    notificationSent = false;
 
     if (activePage === "camera") {
       drawOverlay(
@@ -142,11 +156,13 @@ lastDrawTime = now;
     return;
   }
 
+
   let frame = getFeatureFrame(faces[0]);
 
   if (!frame) {
     return;
   }
+
 
   featureHistory.push(frame);
 
@@ -157,78 +173,117 @@ lastDrawTime = now;
     featureHistory.shift();
   }
 
+
   if (
     modelTrained &&
     featureHistory.length >= sequenceLength
   ) {
+
     predictModel();
+
   } else {
+
     ruleBasedGuess(frame);
+
   }
 
-      if (prediction === "MOUTH OPEN") {
 
-  if (mouthOpenTrackerTime === null) {
-    mouthOpenTrackerTime = Date.now();
-  }
+  // -------------------------
+  // MOUTH OPEN TIMER
+  // -------------------------
 
-  if (
-    Date.now() - mouthOpenTrackerTime >=
-    ALERT_TIMEOUT_DURATION
-  ) {
+  if (prediction === "MOUTH OPEN") {
 
-    sendMouthOpenNotification();
+    if (mouthOpenTrackerTime === null) {
+      mouthOpenTrackerTime = Date.now();
+    }
 
+    let openTime =
+      Date.now() - mouthOpenTrackerTime;
+
+    if (
+      openTime >= ALERT_TIMEOUT_DURATION &&
+      !notificationSent
+    ) {
+
+      sendMouthOpenNotification();
+
+      notificationSent = true;
+
+    }
+
+  } else {
+
+    // Mouth closed again.
+    // Allow a new notification next time.
     mouthOpenTrackerTime = null;
+    notificationSent = false;
+
   }
-
-} else {
-
-  mouthOpenTrackerTime = null;
-
-}
-
-
-
 
 
   if (activePage === "camera") {
+
     drawFacePoints(faces[0]);
     drawCameraInfo();
+
   }
 
   updateCameraGuess();
   updateStatsDisplay();
 }
 
+
+// -------------------------
+// NOTIFICATION FUNCTION
+// -------------------------
+
 async function sendMouthOpenNotification() {
 
   if (!("Notification" in window)) {
-    console.log("Notifications are not supported.");
+
+    console.log(
+      "Notifications are not supported."
+    );
+
     return;
   }
 
+
   if (Notification.permission !== "granted") {
-    console.log("Notification permission is not granted.");
+
+    console.log(
+      "Notification permission is not granted."
+    );
+
     return;
   }
+
 
   try {
 
     const registration =
       await navigator.serviceWorker.ready;
 
+
     await registration.showNotification(
       "Posture Alert!",
       {
-        body: "Your mouth has been open for too long.",
-        icon: "icon.png",
-        tag: "mouth-open-alert",
-        requireInteraction: false
+        body:
+          "Your mouth has been open for too long.",
+
+        tag:
+          "mouth-open-alert",
+
+        requireInteraction:
+          false
       }
     );
 
-    console.log("Mouth-open notification sent.");
+
+    console.log(
+      "Mouth-open notification sent."
+    );
 
   } catch (error) {
 
@@ -241,7 +296,12 @@ async function sendMouthOpenNotification() {
 }
 
 
+// -------------------------
+// CAMERA
+// -------------------------
+
 function drawCamera() {
+
   if (
     !video ||
     video.elt.readyState < 2
@@ -266,8 +326,12 @@ function drawCamera() {
 }
 
 
+// -------------------------
+// FEATURES
+// -------------------------
 
 function getFeatureFrame(face) {
+
   if (
     !face.keypoints ||
     face.keypoints.length < 375
@@ -300,12 +364,14 @@ function getFeatureFrame(face) {
   let faceTop = p[10];
   let faceBottom = p[152];
 
+
   let faceWidth = dist(
     faceLeft.x,
     faceLeft.y,
     faceRight.x,
     faceRight.y
   );
+
 
   let faceHeight = dist(
     faceTop.x,
@@ -314,12 +380,14 @@ function getFeatureFrame(face) {
     faceBottom.y
   );
 
+
   let mouthWidth = dist(
     leftMouth.x,
     leftMouth.y,
     rightMouth.x,
     rightMouth.y
   );
+
 
   if (
     faceWidth <= 1 ||
@@ -329,6 +397,7 @@ function getFeatureFrame(face) {
     return null;
   }
 
+
   let lipDistance = dist(
     topLip.x,
     topLip.y,
@@ -336,14 +405,18 @@ function getFeatureFrame(face) {
     bottomLip.y
   );
 
+
   let mouthGap =
     lipDistance / faceHeight;
+
 
   let normalizedWidth =
     mouthWidth / faceWidth;
 
+
   let mouthRatio =
     lipDistance / mouthWidth;
+
 
   let leftEye =
     dist(
@@ -353,6 +426,7 @@ function getFeatureFrame(face) {
       leftEyeBottom.y
     ) / faceHeight;
 
+
   let rightEye =
     dist(
       rightEyeTop.x,
@@ -360,6 +434,7 @@ function getFeatureFrame(face) {
       rightEyeBottom.x,
       rightEyeBottom.y
     ) / faceHeight;
+
 
   let mouthX =
     (
@@ -370,6 +445,7 @@ function getFeatureFrame(face) {
       nose.x
     ) / faceWidth;
 
+
   let mouthY =
     (
       (
@@ -379,6 +455,7 @@ function getFeatureFrame(face) {
       nose.y
     ) / faceHeight;
 
+
   let browWidth =
     dist(
       leftBrow.x,
@@ -387,17 +464,20 @@ function getFeatureFrame(face) {
       rightBrow.y
     ) / faceWidth;
 
+
   let noseX =
     (
       nose.x -
       faceLeft.x
     ) / faceWidth;
 
+
   let noseY =
     (
       nose.y -
       faceTop.y
     ) / faceHeight;
+
 
   return [
     mouthGap,
@@ -413,8 +493,15 @@ function getFeatureFrame(face) {
   ];
 }
 
+
+// -------------------------
+// RULE BASED PREDICTION
+// -------------------------
+
 function ruleBasedGuess(frame) {
+
   let mouthRatio = frame[2];
+
   let eyeLeft = frame[3];
   let eyeRight = frame[4];
 
@@ -424,29 +511,45 @@ function ruleBasedGuess(frame) {
       eyeRight
     ) / 2;
 
+
   if (mouthRatio > 0.45) {
+
     prediction = "MOUTH OPEN";
     predictionConfidence = 0.8;
+
     setCurrentState(3);
+
     return;
   }
+
 
   if (
     mouthRatio > 0.25 &&
     averageEye < 0.045
   ) {
+
     prediction = "YAWNING";
     predictionConfidence = 0.65;
+
     setCurrentState(2);
+
     return;
   }
 
+
   prediction = "CLOSED";
   predictionConfidence = 0.7;
+
   setCurrentState(0);
 }
 
+
+// -------------------------
+// ML MODEL
+// -------------------------
+
 function predictModel() {
+
   if (
     !classifier ||
     featureHistory.length <
@@ -455,19 +558,26 @@ function predictModel() {
     return;
   }
 
+
   let flattened = [];
+
 
   for (
     let frame of featureHistory
   ) {
+
     for (
       let value of frame
     ) {
+
       flattened.push(value);
+
     }
   }
 
+
   tf.tidy(function() {
+
     let input =
       tf.tensor2d(
         [flattened],
@@ -478,49 +588,71 @@ function predictModel() {
         ]
       );
 
+
     let output =
       classifier.predict(input);
+
 
     let values =
       output.dataSync();
 
+
     let best = 0;
+
 
     for (
       let i = 1;
       i < values.length;
       i++
     ) {
+
       if (
         values[i] >
         values[best]
       ) {
+
         best = i;
+
       }
+
     }
+
 
     prediction =
       classes[best];
 
+
     predictionConfidence =
       values[best];
 
+
     if (
-      predictionConfidence <
-      0.55
+      predictionConfidence < 0.55
     ) {
+
       setCurrentState(4);
+
     } else {
+
       setCurrentState(best);
+
     }
+
   });
 }
 
+
+// -------------------------
+// TRAINING
+// -------------------------
+
 function correctCurrentBehavior(index) {
+
   if (
     featureHistory.length <
     sequenceLength
   ) {
+
     setStatus(
       "Wait until the face sequence fills."
     );
@@ -528,27 +660,34 @@ function correctCurrentBehavior(index) {
     return;
   }
 
+
   let sequence = [];
+
 
   for (
     let i = 0;
     i < featureHistory.length;
     i++
   ) {
+
     let frame =
       featureHistory[i];
 
     sequence.push(
       Array.from(frame)
     );
+
   }
+
 
   samples.push({
     x: sequence,
     y: index
   });
 
+
   updateTrainingCounts();
+
 
   setStatus(
     "Added example: " +
@@ -556,13 +695,16 @@ function correctCurrentBehavior(index) {
   );
 }
 
+
 function setupCorrectionButtons() {
+
   document.getElementById(
     "correctClosed"
   ).onclick =
     function() {
       correctCurrentBehavior(0);
     };
+
 
   document.getElementById(
     "correctTalking"
@@ -571,6 +713,7 @@ function setupCorrectionButtons() {
       correctCurrentBehavior(1);
     };
 
+
   document.getElementById(
     "correctYawning"
   ).onclick =
@@ -578,12 +721,14 @@ function setupCorrectionButtons() {
       correctCurrentBehavior(2);
     };
 
+
   document.getElementById(
     "correctOpen"
   ).onclick =
     function() {
       correctCurrentBehavior(3);
     };
+
 
   document.getElementById(
     "correctOther"
@@ -593,10 +738,13 @@ function setupCorrectionButtons() {
     };
 }
 
+
 function trainModel() {
+
   if (
     samples.length < 10
   ) {
+
     setStatus(
       "Collect at least 10 examples first."
     );
@@ -604,25 +752,34 @@ function trainModel() {
     return;
   }
 
+
   let xData = [];
   let yData = [];
+
 
   for (
     let sample of samples
   ) {
+
     let row = [];
+
 
     for (
       let frame of sample.x
     ) {
+
       for (
         let value of frame
       ) {
+
         row.push(
           Number(value)
         );
+
       }
+
     }
+
 
     if (
       row.length !==
@@ -632,19 +789,26 @@ function trainModel() {
       continue;
     }
 
+
     xData.push(row);
+
 
     let label =
       new Array(5).fill(0);
 
+
     label[sample.y] = 1;
 
+
     yData.push(label);
+
   }
+
 
   if (
     xData.length < 10
   ) {
+
     setStatus(
       "Not enough valid samples."
     );
@@ -652,20 +816,26 @@ function trainModel() {
     return;
   }
 
+
   setStatus("Training...");
+
 
   let xs =
     tf.tensor2d(xData);
 
+
   let ys =
     tf.tensor2d(yData);
+
 
   if (classifier) {
     classifier.dispose();
   }
 
+
   classifier =
     tf.sequential();
+
 
   classifier.add(
     tf.layers.dense({
@@ -678,11 +848,13 @@ function trainModel() {
     })
   );
 
+
   classifier.add(
     tf.layers.dropout({
       rate: 0.25
     })
   );
+
 
   classifier.add(
     tf.layers.dense({
@@ -691,6 +863,7 @@ function trainModel() {
     })
   );
 
+
   classifier.add(
     tf.layers.dense({
       units: 5,
@@ -698,41 +871,54 @@ function trainModel() {
     })
   );
 
+
   classifier.compile({
+
     optimizer:
       tf.train.adam(0.001),
+
     loss:
       "categoricalCrossentropy",
-    metrics: ["accuracy"]
+
+    metrics:
+      ["accuracy"]
+
   });
+
 
   classifier.fit(
     xs,
     ys,
     {
+
       epochs: 40,
-      batchSize: Math.min(
-        16,
-        xData.length
-      ),
+
+      batchSize:
+        Math.min(
+          16,
+          xData.length
+        ),
+
       shuffle: true,
 
+
       callbacks: {
+
         onEpochEnd:
           async function(
             epoch,
             logs
           ) {
+
             let accuracy =
               logs.accuracy ??
               logs.acc ??
               0;
 
+
             setStatus(
               "Training " +
-              (
-                epoch + 1
-              ) +
+              (epoch + 1) +
               "/40  " +
               (
                 accuracy * 100
@@ -740,35 +926,51 @@ function trainModel() {
               "%"
             );
 
+
             await tf.nextFrame();
+
           },
+
 
         onTrainEnd:
           function() {
+
             xs.dispose();
             ys.dispose();
 
             modelTrained = true;
 
+
             document.getElementById(
               "saveModelBtn"
             ).disabled = false;
+
 
             document.getElementById(
               "modelStatus"
             ).innerText =
               "Trained";
 
+
             setStatus(
               "Model trained."
             );
+
           }
+
       }
+
     }
   );
 }
 
+
+// -------------------------
+// SAVE / LOAD MODEL
+// -------------------------
+
 function saveModel() {
+
   if (
     !classifier ||
     !modelTrained
@@ -776,34 +978,45 @@ function saveModel() {
     return;
   }
 
+
   classifier.save(
     "downloads://face-behavior-model"
   );
+
 
   setStatus(
     "Model downloaded."
   );
 }
 
+
 function loadModel() {
+
   let input =
     document.createElement(
       "input"
     );
 
+
   input.type = "file";
+
   input.accept = ".json";
+
 
   input.onchange =
     async function(event) {
+
       let file =
         event.target.files[0];
+
 
       if (!file) {
         return;
       }
 
+
       try {
+
         classifier =
           await tf.loadLayersModel(
             tf.io.browserFiles(
@@ -811,36 +1024,53 @@ function loadModel() {
             )
           );
 
+
         modelTrained = true;
+
 
         document.getElementById(
           "saveModelBtn"
         ).disabled = false;
+
 
         document.getElementById(
           "modelStatus"
         ).innerText =
           "Loaded";
 
+
         setStatus(
           "Model loaded."
         );
+
+
       } catch (error) {
+
         console.error(error);
+
 
         setStatus(
           "Model load failed."
         );
+
       }
+
     };
+
 
   input.click();
 }
 
+
+// -------------------------
+// SAMPLES
+// -------------------------
+
 function saveSamples() {
-  let data = JSON.stringify(
-    samples
-  );
+
+  let data =
+    JSON.stringify(samples);
+
 
   let blob =
     new Blob(
@@ -851,91 +1081,103 @@ function saveSamples() {
       }
     );
 
+
   let url =
-    URL.createObjectURL(
-      blob
-    );
+    URL.createObjectURL(blob);
+
 
   let link =
-    document.createElement(
-      "a"
-    );
+    document.createElement("a");
+
 
   link.href = url;
+
+
   link.download =
     "face-behavior-samples.json";
 
-  document.body.appendChild(
-    link
-  );
+
+  document.body.appendChild(link);
+
 
   link.click();
 
-  document.body.removeChild(
-    link
-  );
 
-  URL.revokeObjectURL(
-    url
-  );
+  document.body.removeChild(link);
+
+
+  URL.revokeObjectURL(url);
+
 
   setStatus(
     "Samples downloaded."
   );
 }
 
+
 function loadSamples() {
+
   let input =
-    document.createElement(
-      "input"
-    );
+    document.createElement("input");
+
 
   input.type = "file";
+
   input.accept = ".json";
+
 
   input.onchange =
     function(event) {
+
       let file =
         event.target.files[0];
+
 
       if (!file) {
         return;
       }
 
+
       let reader =
         new FileReader();
 
+
       reader.onload =
         function() {
+
           try {
+
             let loaded =
               JSON.parse(
                 reader.result
               );
 
+
             if (
-              !Array.isArray(
-                loaded
-              )
+              !Array.isArray(loaded)
             ) {
+
               throw new Error(
                 "Invalid sample file"
               );
+
             }
 
+
             let valid = [];
+
 
             for (
               let sample of loaded
             ) {
+
               if (
                 !sample ||
-                !Array.isArray(
-                  sample.x
-                )
+                !Array.isArray(sample.x)
               ) {
                 continue;
               }
+
 
               if (
                 sample.x.length !==
@@ -944,6 +1186,7 @@ function loadSamples() {
                 continue;
               }
 
+
               if (
                 sample.y < 0 ||
                 sample.y >= 5
@@ -951,74 +1194,95 @@ function loadSamples() {
                 continue;
               }
 
-              let good =
-                true;
+
+              let good = true;
+
 
               for (
                 let frame of sample.x
               ) {
+
                 if (
-                  !Array.isArray(
-                    frame
-                  ) ||
+                  !Array.isArray(frame) ||
                   frame.length !==
                   featureCount
                 ) {
+
                   good = false;
                   break;
+
                 }
+
               }
 
+
               if (good) {
-                valid.push(
-                  sample
-                );
+                valid.push(sample);
               }
+
             }
+
 
             samples = valid;
 
+
             updateTrainingCounts();
+
 
             setStatus(
               "Loaded " +
               samples.length +
               " samples."
             );
+
+
           } catch (error) {
+
             console.error(error);
+
 
             setStatus(
               "Invalid sample file."
             );
+
           }
+
         };
 
-      reader.readAsText(
-        file
-      );
+
+      reader.readAsText(file);
+
     };
+
 
   input.click();
 }
 
+
 function clearSamples() {
+
   if (
     confirm(
       "Clear all training samples?"
     )
   ) {
+
     samples = [];
 
+
     updateTrainingCounts();
+
 
     setStatus(
       "Samples cleared."
     );
+
   }
 }
 
+
 function updateTrainingCounts() {
+
   let counts = [
     0,
     0,
@@ -1027,43 +1291,54 @@ function updateTrainingCounts() {
     0
   ];
 
+
   for (
     let sample of samples
   ) {
+
     if (
       sample.y >= 0 &&
       sample.y < 5
     ) {
+
       counts[
         sample.y
       ]++;
+
     }
+
   }
+
 
   document.getElementById(
     "closedCount"
   ).innerText =
     counts[0];
 
+
   document.getElementById(
     "talkingCount"
   ).innerText =
     counts[1];
+
 
   document.getElementById(
     "yawnCount"
   ).innerText =
     counts[2];
 
+
   document.getElementById(
     "openCount"
   ).innerText =
     counts[3];
 
+
   document.getElementById(
     "otherCount"
   ).innerText =
     counts[4];
+
 
   document.getElementById(
     "trainBtn"
@@ -1071,8 +1346,15 @@ function updateTrainingCounts() {
     samples.length < 10;
 }
 
+
+// -------------------------
+// STATS
+// -------------------------
+
 function setCurrentState(state) {
+
   let now = millis();
+
 
   if (
     state === currentState
@@ -1080,62 +1362,80 @@ function setCurrentState(state) {
     return;
   }
 
+
   if (
     currentState >= 0
   ) {
+
     stateTimes[
       currentState
     ] +=
       now -
       stateStartTime;
+
   }
 
+
   currentState = state;
+
   stateStartTime = now;
+
 
   if (
     state >= 0
   ) {
+
     stateCounts[state]++;
+
   }
 }
 
+
 function updateCameraGuess() {
+
   let element =
     document.getElementById(
       "cameraGuess"
     );
 
+
   if (!element) {
     return;
   }
+
 
   element.innerText =
     "Current guess: " +
     prediction +
     " (" +
     (
-      predictionConfidence *
-      100
+      predictionConfidence * 100
     ).toFixed(0) +
     "%)";
 }
 
+
 function updateStatsDisplay() {
+
   let now = millis();
+
 
   let times =
     stateTimes.slice();
 
+
   if (
     currentState >= 0
   ) {
+
     times[
       currentState
     ] +=
       now -
       stateStartTime;
+
   }
+
 
   document.getElementById(
     "currentState"
@@ -1144,63 +1444,74 @@ function updateStatsDisplay() {
       ? classes[currentState]
       : "Waiting";
 
+
   document.getElementById(
     "confidence"
   ).innerText =
     (
-      predictionConfidence *
-      100
+      predictionConfidence * 100
     ).toFixed(0) + "%";
+
 
   document.getElementById(
     "closedStats"
   ).innerText =
     stateCounts[0];
 
+
   document.getElementById(
     "talkingStats"
   ).innerText =
     stateCounts[1];
+
 
   document.getElementById(
     "yawnStats"
   ).innerText =
     stateCounts[2];
 
+
   document.getElementById(
     "openStats"
   ).innerText =
     stateCounts[3];
+
 
   document.getElementById(
     "otherStats"
   ).innerText =
     stateCounts[4];
 
+
   document.getElementById(
     "closedTime"
   ).innerText =
     formatSeconds(times[0]);
+
 
   document.getElementById(
     "talkingTime"
   ).innerText =
     formatSeconds(times[1]);
 
+
   document.getElementById(
     "yawnTime"
   ).innerText =
     formatSeconds(times[2]);
+
 
   document.getElementById(
     "openTime"
   ).innerText =
     formatSeconds(times[3]);
 
+
   document.getElementById(
     "otherTime"
   ).innerText =
     formatSeconds(times[4]);
+
 
   document.getElementById(
     "sessionTime"
@@ -1213,7 +1524,9 @@ function updateStatsDisplay() {
     );
 }
 
+
 function resetStats() {
+
   stateCounts = [
     0,
     0,
@@ -1221,6 +1534,7 @@ function resetStats() {
     0,
     0
   ];
+
 
   stateTimes = [
     0,
@@ -1230,17 +1544,26 @@ function resetStats() {
     0
   ];
 
+
   currentState = -1;
+
 
   stateStartTime =
     millis();
+
 
   setStatus(
     "Stats reset."
   );
 }
 
+
+// -------------------------
+// DRAWING
+// -------------------------
+
 function drawFacePoints(face) {
+
   let indices = [
     13,
     14,
@@ -1252,21 +1575,24 @@ function drawFacePoints(face) {
     374
   ];
 
+
   fill(
     0,
     200,
     255
   );
 
+
   noStroke();
+
 
   for (
     let index of indices
   ) {
+
     let p =
-      face.keypoints[
-        index
-      ];
+      face.keypoints[index];
+
 
     ellipse(
       width - p.x,
@@ -1274,10 +1600,13 @@ function drawFacePoints(face) {
       7,
       7
     );
+
   }
 }
 
+
 function drawCameraInfo() {
+
   fill(
     0,
     0,
@@ -1285,7 +1614,9 @@ function drawCameraInfo() {
     190
   );
 
+
   noStroke();
+
 
   rect(
     10,
@@ -1295,14 +1626,18 @@ function drawCameraInfo() {
     8
   );
 
+
   fill(255);
+
 
   textAlign(
     LEFT,
     CENTER
   );
 
+
   textSize(20);
+
 
   text(
     prediction,
@@ -1310,64 +1645,55 @@ function drawCameraInfo() {
     35
   );
 
+
   fill(
-    predictionConfidence >
-    0.7
-      ? color(
-          70,
-          255,
-          120
-        )
-      : color(
-          255,
-          190,
-          60
-        )
+    predictionConfidence > 0.7
+      ? color(70, 255, 120)
+      : color(255, 190, 60)
   );
 
+
   textSize(15);
+
 
   text(
     "Confidence: " +
     (
-      predictionConfidence *
-      100
+      predictionConfidence * 100
     ).toFixed(0) +
     "%",
     25,
     61
   );
 
+
   if (!modelTrained) {
+
     fill(
       255,
       190,
       60
     );
 
+
     textSize(12);
+
 
     text(
       "EXPERIMENTAL RULE-BASED GUESS",
       250,
       61
     );
-    fill(255);
 
-textSize(12);
-
-text(
-  "Detection gap: " + drawGap + " ms",
-  25,
-  80
-);
   }
 }
+
 
 function drawOverlay(
   textValue,
   col
 ) {
+
   fill(
     0,
     0,
@@ -1375,7 +1701,9 @@ function drawOverlay(
     190
   );
 
+
   noStroke();
+
 
   rect(
     10,
@@ -1385,14 +1713,18 @@ function drawOverlay(
     8
   );
 
+
   fill(col);
+
 
   textAlign(
     LEFT,
     CENTER
   );
 
+
   textSize(18);
+
 
   text(
     textValue,
@@ -1401,7 +1733,13 @@ function drawOverlay(
   );
 }
 
+
+// -------------------------
+// TABS
+// -------------------------
+
 function setupTabs() {
+
   document.getElementById(
     "cameraTab"
   ).onclick =
@@ -1409,12 +1747,14 @@ function setupTabs() {
       showPage("camera");
     };
 
+
   document.getElementById(
     "trainingTab"
   ).onclick =
     function() {
       showPage("training");
     };
+
 
   document.getElementById(
     "statsTab"
@@ -1424,8 +1764,11 @@ function setupTabs() {
     };
 }
 
+
 function showPage(page) {
+
   activePage = page;
+
 
   document.getElementById(
     "cameraPage"
@@ -1434,12 +1777,14 @@ function showPage(page) {
       ? "block"
       : "none";
 
+
   document.getElementById(
     "trainingPage"
   ).style.display =
     page === "training"
       ? "block"
       : "none";
+
 
   document.getElementById(
     "statsPage"
@@ -1448,6 +1793,7 @@ function showPage(page) {
       ? "block"
       : "none";
 
+
   document.getElementById(
     "cameraTab"
   ).classList.toggle(
@@ -1455,12 +1801,14 @@ function showPage(page) {
     page === "camera"
   );
 
+
   document.getElementById(
     "trainingTab"
   ).classList.toggle(
     "active",
     page === "training"
   );
+
 
   document.getElementById(
     "statsTab"
@@ -1470,31 +1818,42 @@ function showPage(page) {
   );
 }
 
+
+// -------------------------
+// BUTTONS
+// -------------------------
+
 function setupTrainingButtons() {
+
   document.getElementById(
     "trainBtn"
   ).onclick =
     trainModel;
+
 
   document.getElementById(
     "saveModelBtn"
   ).onclick =
     saveModel;
 
+
   document.getElementById(
     "loadModelBtn"
   ).onclick =
     loadModel;
+
 
   document.getElementById(
     "saveSamplesBtn"
   ).onclick =
     saveSamples;
 
+
   document.getElementById(
     "loadSamplesBtn"
   ).onclick =
     loadSamples;
+
 
   document.getElementById(
     "clearSamplesBtn"
@@ -1502,38 +1861,52 @@ function setupTrainingButtons() {
     clearSamples;
 }
 
+
 function setupStats() {
+
   document.getElementById(
     "resetStatsBtn"
   ).onclick =
     resetStats;
 }
 
+
+// -------------------------
+// HELPERS
+// -------------------------
+
 function setStatus(message) {
+
   if (statusDiv) {
+
     statusDiv.innerText =
       message;
+
   }
 }
 
-function formatSeconds(
-  milliseconds
-) {
+
+function formatSeconds(milliseconds) {
+
   return (
     milliseconds / 1000
   ).toFixed(1) + "s";
 }
 
+
 function formatClock(seconds) {
+
   let minutes =
     Math.floor(
       seconds / 60
     );
 
+
   let remaining =
     Math.floor(
       seconds % 60
     );
+
 
   return (
     minutes +
