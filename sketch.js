@@ -1,7 +1,8 @@
 let video;
 let faceMesh;
 let faces = [];
-
+let lastDrawTime = 0;
+let drawGap = 0;
 let mouthOpenTrackerTime = null;
 const ALERT_TIMEOUT_DURATION = 3000;
 
@@ -94,6 +95,14 @@ function setup() {
 
 }
 function draw() {
+  let now = Date.now();
+
+if (lastDrawTime !== 0) {
+  drawGap = now - lastDrawTime;
+}
+
+lastDrawTime = now;
+
   background(10);
 
 
@@ -1258,7 +1267,7 @@ function drawCameraInfo() {
     10,
     10,
     440,
-    75,
+    95,
     8
   );
 
@@ -1319,6 +1328,15 @@ function drawCameraInfo() {
       250,
       61
     );
+    fill(255);
+
+textSize(12);
+
+text(
+  "Detection gap: " + drawGap + " ms",
+  25,
+  80
+);
   }
 }
 
