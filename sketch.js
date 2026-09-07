@@ -117,7 +117,7 @@ backgroundWorker.onmessage = function(e) {
     }
   }
 };
-
+}
 function draw() {
   background(10);
 
