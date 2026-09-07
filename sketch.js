@@ -74,7 +74,7 @@ function setup() {
     }
   );
 
-  let workerCode = `
+  let workerCode = 
     let timer = null;
     self.onmessage = function(e) {
       if (e.data === 'start') {
@@ -87,9 +87,7 @@ function setup() {
         clearInterval(timer);
         timer = null;
       }
-    };
-  `;
-  let blob = new Blob([workerCode], { type: "application/javascript" });
+      let blob = new Blob([workerCode], { type: "application/javascript" });
   let backgroundWorker = new Worker(URL.createObjectURL(blob));
   backgroundWorker.onmessage = function(e) {
     if (e.data === 'trigger' && prediction === "MOUTH OPEN") {
