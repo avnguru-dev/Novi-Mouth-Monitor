@@ -61,7 +61,7 @@ function setup() {
 
   setStatus("Loading FaceMesh...");
 
-  faceMesh = ml5.faceMesh(
+    faceMesh = ml5.faceMesh(
     {
       maxFaces: 1,
       refineLandmarks: true,
@@ -76,6 +76,23 @@ function setup() {
           faces = results;
         }
       );
+
+      setStatus("FaceMesh ready.");
+      
+      if (video.elt.requestPictureInPicture) {
+        video.elt.removeAttribute('hidden');
+        video.elt.style.position = 'fixed';
+        video.elt.style.bottom = '0';
+        video.elt.style.right = '0';
+        video.elt.style.width = '1px';
+        video.elt.style.height = '1px';
+        video.elt.style.opacity = '0.01';
+        video.elt.requestPictureInPicture().catch(e => console.log(e));
+      }
+    }
+  );
+}
+
 
       setStatus("FaceMesh ready.");
     }
@@ -205,24 +222,29 @@ function draw() {
 
 
 function drawCamera() {
-  if (!video || video.elt.readyState < 2) {
+  if (
+    !video ||
+    video.elt.readyState < 2
+  ) {
     return;
   }
+
   push();
+
   translate(width, 0);
   scale(-1, 1);
-  image(video, 0, 0, width, height);
+
+  image(
+    video,
+    0,
+    0,
+    width,
+    height
+  );
+
   pop();
-  
-  canvas.elt.onclick = function() {
-    if (video.elt.requestPictureInPicture) {
-      video.elt.removeAttribute('hidden');
-      video.elt.style.width = '1px';
-      video.elt.style.height = '1px';
-      video.elt.requestPictureInPicture();
-    }
-  };
 }
+
 
 
 function getFeatureFrame(face) {
