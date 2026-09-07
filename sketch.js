@@ -30,8 +30,8 @@ let predictionConfidence = 0;
 let currentState = -1;
 let stateStartTime = 0;
 
-let stateCounts =;
-let stateTimes =;
+let stateCounts;
+let stateTimes;
 
 let sessionStartTime = 0;
 let activePage = "camera";
