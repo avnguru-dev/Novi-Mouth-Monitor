@@ -168,12 +168,21 @@ function draw() {
   ) {
 
     if (
-      notificationServiceWorker
-    ) {
+  notificationServiceWorker &&
+  Notification.permission === "granted"
+) {
 
-      notificationServiceWorker.active?.postMessage(
-        "MOUTH_OPEN_ALERT"
-      );
+  notificationServiceWorker.showNotification(
+    "Posture Alert!",
+    {
+      body: "Your mouth has been open for too long.",
+      requireInteraction: false,
+      tag: "mouth-open-alert"
+    }
+  );
+
+}
+
 
     }
 
