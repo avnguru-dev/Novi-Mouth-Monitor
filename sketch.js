@@ -1,3 +1,5 @@
+let backgroundWorker = null;
+
 let video;
 let faceMesh;
 let faces = [];
@@ -78,6 +80,38 @@ function setup() {
       setStatus("FaceMesh ready.");
     }
   );
+    let workerCode = `
+    let timer = null;
+    self.onmessage = function(e) {
+      if (e.data === 'start') {
+        if (!timer) {
+          timer = setInterval(function() {
+            self.postMessage('trigger');
+          }, 100);
+        }
+      } else if (e.data === 'stop') {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+  `;
+  let blob = new Blob([workerCode], { type: "application/javascript" });
+  backgroundWorker = new Worker(URL.createObjectURL(blob));
+  backgroundWorker.onmessage = function(e) {
+    if (e.data === 'trigger' && prediction === "MOUTH OPEN") {
+      if (!mouthOpenTrackerTime) {
+        mouthOpenTrackerTime = Date.now();
+      } else if (Date.now() - mouthOpenTrackerTime > ALERT_TIMEOUT_DURATION) {
+        if (Notification.permission === "granted") {
+          new Notification("Posture Alert!", {
+            body: "Your mouth has been open for too long.",
+            requireInteraction: false
+          });
+        }
+        mouthOpenTrackerTime = null;
+      }
+    }
+  };
 }
 
 function draw() {
@@ -142,23 +176,13 @@ function draw() {
     ruleBasedGuess(frame);
   }
 
-  if (prediction === "MOUTH OPEN") {
-    if (!mouthOpenTrackerTime) {
-      mouthOpenTrackerTime = Date.now();
-    } else if (Date.now() - mouthOpenTrackerTime > ALERT_TIMEOUT_DURATION) {
-      if (Notification.permission === "granted") {
-        new Notification("Posture Alert!", {
-          body: "Your mouth has been open for too long.",
-          requireInteraction: false
-        });
-      } else if (Notification.permission !== "denied") {
-        Notification.requestPermission();
-      }
-      mouthOpenTrackerTime = null;
-    }
+    if (prediction === "MOUTH OPEN") {
+    backgroundWorker.postMessage('start');
   } else {
+    backgroundWorker.postMessage('stop');
     mouthOpenTrackerTime = null;
   }
+
 
   if (activePage === "camera") {
     drawFacePoints(faces[0]);
