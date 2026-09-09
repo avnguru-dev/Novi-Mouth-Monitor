@@ -63,6 +63,19 @@ if ("serviceWorker" in navigator) {
 
 
 // -------------------------
+// PAGE VISIBILITY API - Keep running in background
+// -------------------------
+
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    console.log("Tab hidden - processing continues in background");
+  } else {
+    console.log("Tab visible again");
+  }
+});
+
+
+// -------------------------
 // SETUP
 // -------------------------
 
