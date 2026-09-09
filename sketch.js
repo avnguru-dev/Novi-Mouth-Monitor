@@ -3,6 +3,7 @@ let faceMesh;
 let faces = [];
 let audioCtx;
 let mouthMonitorWorker;
+let alertOscillator = null;
 
 
 
@@ -74,8 +75,8 @@ function initializeWorker() {
     // Listen for notifications from worker
     mouthMonitorWorker.onmessage = function(event) {
       if (event.data.type === 'SEND_NOTIFICATION') {
-        console.log("Worker requesting notification");
-        sendMouthOpenNotification();
+        console.log("🚨 Worker triggered alert!");
+        triggerMouthOpenAlert();
       }
     };
     
@@ -261,7 +262,7 @@ function draw() {
       !notificationSent
     ) {
 
-      sendMouthOpenNotification();
+      triggerMouthOpenAlert();
 
       notificationSent = true;
 
@@ -290,69 +291,106 @@ function draw() {
 
 
 // -------------------------
-// NOTIFICATION FUNCTION
+// ALERT TRIGGER - NOTIFICATIONS + AUDIO
 // -------------------------
+
+function triggerMouthOpenAlert() {
+
+  console.log("🚨 MOUTH OPEN ALERT TRIGGERED!");
+
+  // Try browser notification first
+  sendMouthOpenNotification();
+
+  // Also play audio alert (works everywhere!)
+  playAudioAlert();
+}
+
 
 async function sendMouthOpenNotification() {
 
-  console.log("sendMouthOpenNotification called");
-
   if (!("Notification" in window)) {
-    console.log("Notifications are not supported.");
     return;
   }
 
-  console.log("Notification permission:", Notification.permission);
-
   if (Notification.permission !== "granted") {
-    console.log("Requesting notification permission...");
-    try {
-      const permission = await Notification.requestPermission();
-      console.log("Permission result:", permission);
-      if (permission !== "granted") {
-        return;
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+
+    await registration.showNotification(
+      "⚠️ MOUTH OPEN ALERT!",
+      {
+        body: "Your mouth has been open for too long. Close it!",
+        tag: "mouth-open-alert",
+        requireInteraction: true,
+        badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/></svg>"
       }
-    } catch (error) {
-      console.error("Permission request error:", error);
+    );
+
+    console.log("✅ Browser notification sent");
+
+  } catch (error) {
+    console.error("Notification failed:", error);
+  }
+}
+
+
+function playAudioAlert() {
+
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.log("Audio context not available");
       return;
     }
   }
 
+  // Resume audio context if suspended (common in browsers)
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+
   try {
-    // Try Service Worker notification first
-    if (notificationServiceWorker && navigator.serviceWorker.controller) {
-      const registration = await navigator.serviceWorker.ready;
-
-      await registration.showNotification(
-        "⚠️ MOUTH OPEN ALERT!",
-        {
-          body: "Your mouth has been open for too long. Close it!",
-          tag: "mouth-open-alert",
-          requireInteraction: true,
-          badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/></svg>",
-          icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/><text x='50' y='60' font-size='50' fill='white' text-anchor='middle'>!</text></svg>"
-        }
-      );
-
-      console.log("✅ Mouth-open notification sent via Service Worker");
-
-    } else {
-      // Fallback: Use standard Web Notification API
-      console.log("Service Worker not available, using standard Notification API");
-      new Notification(
-        "⚠️ MOUTH OPEN ALERT!",
-        {
-          body: "Your mouth has been open for too long. Close it!",
-          tag: "mouth-open-alert",
-          requireInteraction: true,
-          badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/></svg>"
-        }
-      );
-      console.log("✅ Mouth-open notification sent via standard API");
+    // Stop any existing alert
+    if (alertOscillator) {
+      alertOscillator.stop();
     }
 
+    // Create new oscillator for beeping sound
+    alertOscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    alertOscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    // High-pitched beep
+    alertOscillator.type = 'sine';
+    alertOscillator.frequency.value = 800;
+
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+
+    alertOscillator.start(audioCtx.currentTime);
+
+    // Beep pattern: 200ms on, 100ms off, repeat 3 times
+    const beepDuration = 0.2;
+    const silenceDuration = 0.1;
+
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime + beepDuration);
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + beepDuration + silenceDuration);
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime + beepDuration * 2 + silenceDuration);
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + beepDuration * 2 + silenceDuration * 2);
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime + beepDuration * 3 + silenceDuration * 2);
+
+    alertOscillator.stop(audioCtx.currentTime + beepDuration * 3 + silenceDuration * 2);
+
+    console.log("🔊 Audio alert playing");
+
   } catch (error) {
-    console.error("❌ Could not show notification:", error);
+    console.error("Audio alert failed:", error);
   }
 }
 
