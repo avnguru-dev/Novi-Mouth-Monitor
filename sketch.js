@@ -74,6 +74,7 @@ function initializeWorker() {
     // Listen for notifications from worker
     mouthMonitorWorker.onmessage = function(event) {
       if (event.data.type === 'SEND_NOTIFICATION') {
+        console.log("Worker requesting notification");
         sendMouthOpenNotification();
       }
     };
@@ -294,61 +295,64 @@ function draw() {
 
 async function sendMouthOpenNotification() {
 
+  console.log("sendMouthOpenNotification called");
+
   if (!("Notification" in window)) {
-
-    console.log(
-      "Notifications are not supported."
-    );
-
+    console.log("Notifications are not supported.");
     return;
   }
 
+  console.log("Notification permission:", Notification.permission);
 
   if (Notification.permission !== "granted") {
-
-    console.log(
-      "Notification permission is not granted."
-    );
-
-    return;
+    console.log("Requesting notification permission...");
+    try {
+      const permission = await Notification.requestPermission();
+      console.log("Permission result:", permission);
+      if (permission !== "granted") {
+        return;
+      }
+    } catch (error) {
+      console.error("Permission request error:", error);
+      return;
+    }
   }
 
-
   try {
+    // Try Service Worker notification first
+    if (notificationServiceWorker && navigator.serviceWorker.controller) {
+      const registration = await navigator.serviceWorker.ready;
 
-    const registration =
-      await navigator.serviceWorker.ready;
+      await registration.showNotification(
+        "⚠️ MOUTH OPEN ALERT!",
+        {
+          body: "Your mouth has been open for too long. Close it!",
+          tag: "mouth-open-alert",
+          requireInteraction: true,
+          badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/></svg>",
+          icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/><text x='50' y='60' font-size='50' fill='white' text-anchor='middle'>!</text></svg>"
+        }
+      );
 
+      console.log("✅ Mouth-open notification sent via Service Worker");
 
-    await registration.showNotification(
-      "⚠️ Posture Alert!",
-      {
-        body:
-          "Your mouth has been open for too long.",
-
-        tag:
-          "mouth-open-alert",
-
-        requireInteraction:
-          true,
-
-        badge:
-          "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF6B6B'/><text x='50' y='60' font-size='60' fill='white' text-anchor='middle'>!</text></svg>"
-      }
-    );
-
-
-    console.log(
-      "Mouth-open notification sent."
-    );
+    } else {
+      // Fallback: Use standard Web Notification API
+      console.log("Service Worker not available, using standard Notification API");
+      new Notification(
+        "⚠️ MOUTH OPEN ALERT!",
+        {
+          body: "Your mouth has been open for too long. Close it!",
+          tag: "mouth-open-alert",
+          requireInteraction: true,
+          badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF0000'/></svg>"
+        }
+      );
+      console.log("✅ Mouth-open notification sent via standard API");
+    }
 
   } catch (error) {
-
-    console.error(
-      "Could not show notification:",
-      error
-    );
-
+    console.error("❌ Could not show notification:", error);
   }
 }
 
