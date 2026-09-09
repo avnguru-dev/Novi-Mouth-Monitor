@@ -43,7 +43,7 @@ let statusDiv;
 
 let notificationServiceWorker = null;
 
-const ALERT_TIMEOUT_DURATION = 3000;
+const ALERT_TIMEOUT_DURATION = 1000;
 let mouthOpenTrackerTime = null;
 let notificationSent = false;
 
