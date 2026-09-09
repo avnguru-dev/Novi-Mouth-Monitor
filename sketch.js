@@ -1,6 +1,9 @@
 let video;
 let faceMesh;
 let faces = [];
+let audioCtx;
+
+
 
 let modelReady = false;
 let classifier = null;
@@ -1916,3 +1919,20 @@ function formatClock(seconds) {
     ).padStart(2, "0")
   );
 }
+function init() {
+  document.addEventListener('click', startSilentAudio, { once: true });
+}
+
+function startSilentAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0.0;
+  const oscillator = audioCtx.createOscillator();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = 440;
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  oscillator.start();
+}
+
+init();
