@@ -2,6 +2,7 @@ let video;
 let faceMesh;
 let faces = [];
 let audioCtx;
+let mouthMonitorWorker;
 
 
 
@@ -63,12 +64,34 @@ if ("serviceWorker" in navigator) {
 
 
 // -------------------------
+// WEB WORKER - BACKGROUND MONITORING
+// -------------------------
+
+function initializeWorker() {
+  if (typeof(Worker) !== "undefined") {
+    mouthMonitorWorker = new Worker("mouth-monitor-worker.js");
+    
+    // Listen for notifications from worker
+    mouthMonitorWorker.onmessage = function(event) {
+      if (event.data.type === 'SEND_NOTIFICATION') {
+        sendMouthOpenNotification();
+      }
+    };
+    
+    console.log("Mouth monitor worker initialized");
+  } else {
+    console.log("Web Workers not supported - using main thread monitoring");
+  }
+}
+
+
+// -------------------------
 // PAGE VISIBILITY API - Keep running in background
 // -------------------------
 
 document.addEventListener('visibilitychange', function() {
   if (document.hidden) {
-    console.log("Tab hidden - processing continues in background");
+    console.log("Tab hidden - worker is still monitoring in background");
   } else {
     console.log("Tab visible again");
   }
@@ -96,6 +119,9 @@ function setup() {
   setupStats();
 
   sessionStartTime = millis();
+
+  // Initialize the background worker
+  initializeWorker();
 
   setStatus("Loading FaceMesh...");
 
@@ -205,7 +231,19 @@ function draw() {
 
 
   // -------------------------
-  // MOUTH OPEN TIMER
+  // SEND PREDICTION TO WORKER
+  // -------------------------
+
+  if (mouthMonitorWorker) {
+    mouthMonitorWorker.postMessage({
+      prediction: prediction,
+      confidence: predictionConfidence
+    });
+  }
+
+
+  // -------------------------
+  // MOUTH OPEN TIMER (MAIN THREAD FALLBACK)
   // -------------------------
 
   if (prediction === "MOUTH OPEN") {
@@ -283,7 +321,7 @@ async function sendMouthOpenNotification() {
 
 
     await registration.showNotification(
-      "Posture Alert!",
+      "⚠️ Posture Alert!",
       {
         body:
           "Your mouth has been open for too long.",
@@ -292,7 +330,10 @@ async function sendMouthOpenNotification() {
           "mouth-open-alert",
 
         requireInteraction:
-          false
+          true,
+
+        badge:
+          "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23FF6B6B'/><text x='50' y='60' font-size='60' fill='white' text-anchor='middle'>!</text></svg>"
       }
     );
 
