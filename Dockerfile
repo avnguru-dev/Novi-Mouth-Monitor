@@ -1,13 +1,15 @@
-FROM node:18-bullseye-slim
+FROM node:18-bullseye
 
 # Install ffmpeg for decoding audio
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install production deps
 COPY package.json package-lock.json* ./
-RUN npm install --production
+RUN npm ci --production
 
 # Copy app
 COPY . .
