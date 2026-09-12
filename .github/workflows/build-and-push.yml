@@ -1,0 +1,7 @@
+name: Build and push Docker image
+
+on: push: branches: - feature/audio-stream-push - main
+
+permissions: contents: read packages: write
+
+jobs: build: runs-on: ubuntu-latest steps: - uses: actions/checkout@v4
