@@ -1,13 +1,14 @@
-FROM node:18-bullseye
+FROM jrottenberg/ffmpeg:5.1-ubuntu AS ffmpeg
 
-# Install ffmpeg for decoding audio
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
+FROM node:18-bullseye-slim
+
+# Copy ffmpeg binary + libs from ffmpeg image
+COPY --from=ffmpeg /usr/bin/ffmpeg /usr/bin/ffmpeg
+COPY --from=ffmpeg /usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
 
 WORKDIR /app
 
-# Install production deps
+# Install Node deps
 COPY package.json package-lock.json* ./
 RUN npm ci --production
 
