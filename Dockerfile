@@ -1,10 +1,8 @@
-FROM jrottenberg/ffmpeg:5.1-ubuntu AS ffmpeg
-
 FROM node:18-bullseye-slim
 
-# Copy ffmpeg binary + libs from ffmpeg image
-COPY --from=ffmpeg /usr/bin/ffmpeg /usr/bin/ffmpeg
-COPY --from=ffmpeg /usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
+# Copy ffmpeg binary + libs from the ffmpeg image reference
+COPY --from=jrottenberg/ffmpeg:5.1-ubuntu /usr/bin/ffmpeg /usr/bin/ffmpeg
+COPY --from=jrottenberg/ffmpeg:5.1-ubuntu /usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
 
 WORKDIR /app
 
